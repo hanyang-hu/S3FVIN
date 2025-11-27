@@ -1,7 +1,9 @@
 # LieFVIN
 Modifed from the code for paper "Lie Group Forced Variational Integrator Networks for Learning and Control of Robot Systems". The original repository is at https://thaipduong.github.io/LieFVIN/.
 
-Please check out the paper here: https://arxiv.org/pdf/2211.16006.pdf
+I am trying to use unit quaternions to represent the rotation instead, inspired by [this paper](https://mathweb.ucsd.edu/~mleok/pdf/ShLe2017_quaternions.pdf).
+
+Please check out the original paper of LieFVIN here: https://arxiv.org/pdf/2211.16006.pdf
 
 ## Dependencies
 The code has been tested with Ubuntu 18.04, Python 3.8 and the following packages:
@@ -47,7 +49,7 @@ Run ```python ./examples/quadrotor/control_mpc_quadrotor_SE3.py``` to test our M
 
 
 ## Citation
-If you find our papers/code useful for your research, please cite our work as follows.
+If you find the original LieFVIN papers/code useful for your research, please cite their work as follows.
 
 1. V. Duruisseaux, T. Duong, M. Leok, N. Atanasov. [Lie Group Forced Variational Integrator Networks for Learning and Control of Robot Systems](https://arxiv.org/pdf/2211.16006.pdf). arxiv 2022..
 
