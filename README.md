@@ -1,5 +1,5 @@
 # LieFVIN
-Code for paper "Lie Group Forced Variational Integrator Networks for Learning and Control of Robot Systems"
+Modifed from the code for paper "Lie Group Forced Variational Integrator Networks for Learning and Control of Robot Systems". The original repository is at https://thaipduong.github.io/LieFVIN/.
 
 Please check out the paper here: https://arxiv.org/pdf/2211.16006.pdf
 

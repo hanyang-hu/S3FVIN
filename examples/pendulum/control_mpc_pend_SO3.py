@@ -46,7 +46,7 @@ def plot_traj(traj, t_eval):
     plt.xlabel('$t(s)$', fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
     plt.tight_layout()
-    plt.savefig('./png/control_theta.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/control_theta.pdf', bbox_inches='tight')
     plt.show()
 
     fig = plt.figure(figsize= figsize)
@@ -56,7 +56,7 @@ def plot_traj(traj, t_eval):
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
     plt.tight_layout()
-    plt.savefig('./png/control_thetadot.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/control_thetadot.pdf', bbox_inches='tight')
     plt.show()
 
     fig = plt.figure(figsize=figsize)
@@ -66,7 +66,7 @@ def plot_traj(traj, t_eval):
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
     plt.tight_layout()
-    plt.savefig('./png/control_input.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/control_input.pdf', bbox_inches='tight')
     plt.show()
 
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
             model = SO3FVIN(device=device, u_dim=1, time_step=dt, allow_unused=True).to(device)
             stats = None
             if not self.gt:
-                path = 'data/run1/pendulum-so3ham-vin-10p-6000.tar'
+                path = sys.path_here + 'data/run1/pendulum-so3ham-vin-10p-6000.tar'
                 model.load_state_dict(torch.load(path, map_location=device))
                 #path = './data/run5_dt002_good_retrained_withfixbug/pendulum-so3ham-vin-10p-stats.pkl'
                 #stats = from_pickle(path)
