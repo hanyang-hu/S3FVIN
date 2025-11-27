@@ -7,6 +7,9 @@ import envs
 from scipy.spatial.transform import Rotation
 from LieFVIN import SO3FVIN, from_pickle
 
+import os, sys
+sys.path_here = os.path.dirname(os.path.abspath(__file__)) + "/"
+
 
 gpu=0
 device = torch.device('cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu')
@@ -117,7 +120,7 @@ def get_model(load = True):
     model = SO3FVIN(device=device, u_dim = 1, time_step = dt).to(device)
     stats = None
     if load:
-        path = 'data/run1/pendulum-so3ham-vin-10p-6000.tar'
+        path = sys.path_here + 'data/run1/pendulum-so3ham-vin-10p-6000.tar'
         model.load_state_dict(torch.load(path, map_location=device))
     return model, None
 
@@ -202,7 +205,7 @@ plt.xticks(fontsize=24)
 plt.yticks(fontsize=24)
 plt.legend(fontsize=24)
 if savefig:
-    plt.savefig('./png/hamiltonian.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/hamiltonian.pdf', bbox_inches='tight')
 plt.show()
 
 fig = plt.figure(figsize=(12,7))
@@ -244,7 +247,7 @@ plt.xticks(fontsize=fontsize_ticks)
 plt.yticks(fontsize=fontsize_ticks)
 plt.legend(fontsize=fontsize)
 if savefig:
-    plt.savefig('./png/SO3_constraints.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/SO3_constraints.pdf', bbox_inches='tight')
 plt.show()
 
 ############################## PLOT PHASE PORTRAIT ROLLED OUT FROM OUR DYNAMICS ###############################
@@ -268,6 +271,6 @@ plt.xticks(fontsize=fontsize_ticks)
 plt.yticks(fontsize=fontsize_ticks)
 plt.legend(fontsize=fontsize)
 if savefig:
-    plt.savefig('./png/phase_portrait.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/phase_portrait.pdf', bbox_inches='tight')
 plt.show()
 

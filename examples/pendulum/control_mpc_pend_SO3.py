@@ -18,6 +18,9 @@ dt = 0.02
 mpc_dt = 0.02
 requires_grad = True
 
+import os, sys
+sys.path_here = os.path.dirname(os.path.abspath(__file__)) + "/"
+
 gym_log.set_level(gym_log.INFO)
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG,

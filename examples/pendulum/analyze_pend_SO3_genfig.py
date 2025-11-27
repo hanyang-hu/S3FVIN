@@ -7,6 +7,9 @@ from scipy.spatial.transform import Rotation
 from LieFVIN import SO3FVIN, from_pickle, compute_rotation_matrix_from_quaternion
 solve_ivp = scipy.integrate.solve_ivp
 
+import os, sys
+sys.path_here = os.path.dirname(os.path.abspath(__file__)) + "/"
+
 plt.rcParams['pdf.fonttype'] = 42
 plt.rcParams['ps.fonttype'] = 42
 plt.rcParams['text.usetex'] = True
@@ -19,10 +22,10 @@ def get_model(load = True):
     model = SO3FVIN(device=device, u_dim = 1, time_step = dt).to(device)
     stats = None
     if load:
-        path = 'data/run2/pendulum-so3ham-vin-10p-6000.tar'
-        model.load_state_dict(torch.load(path, map_location=device))
-        path = 'data/run2/pendulum-so3ham-vin-10p-stats.pkl'
-        stats = from_pickle(path)
+        path = 'data/run1/pendulum-so3ham-vin-10p-6000.tar'
+        model.load_state_dict(torch.load(sys.path_here + path, map_location=device))
+        path = 'data/run1/pendulum-so3ham-vin-10p-stats.pkl'
+        stats = from_pickle(sys.path_here + path)
     return model, stats
 
 if __name__ == "__main__":
@@ -50,7 +53,7 @@ if __name__ == "__main__":
     plt.yscale('log')
     plt.legend(fontsize=fontsize)
     if savefig:
-        plt.savefig('./png/loss_log.pdf', bbox_inches='tight')
+        plt.savefig(sys.path_here + './png/loss_log.pdf', bbox_inches='tight')
     plt.show()
 
     # Get state q from a range of pendulum angle theta
@@ -81,7 +84,7 @@ if __name__ == "__main__":
     plt.ylim(-0.5, 2.5)
     plt.legend(fontsize=fontsize)
     if savefig:
-        plt.savefig('./png/g_x.pdf', bbox_inches='tight')
+        plt.savefig(sys.path_here + './png/g_x.pdf', bbox_inches='tight')
     plt.show()
 
     # Plot V(q)
@@ -95,7 +98,7 @@ if __name__ == "__main__":
     plt.ylim(-8, 12)
     plt.legend(fontsize=fontsize)
     if savefig:
-        plt.savefig('./png/V_x.pdf', bbox_inches='tight')
+        plt.savefig(sys.path_here + './png/V_x.pdf', bbox_inches='tight')
     plt.show()
 
     # Plot M^-1(q)
@@ -119,5 +122,5 @@ if __name__ == "__main__":
     plt.ylim(-0.5, 6.0)
     plt.legend(fontsize=fontsize)
     if savefig:
-        plt.savefig('./png/M_x_all.pdf', bbox_inches='tight')
+        plt.savefig(sys.path_here + './png/M_x_all.pdf', bbox_inches='tight')
     plt.show()
