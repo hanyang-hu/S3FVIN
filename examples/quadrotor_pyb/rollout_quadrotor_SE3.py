@@ -10,6 +10,9 @@ import scipy.integrate
 solve_ivp = scipy.integrate.solve_ivp
 from torchdiffeq import odeint_adjoint as odeint
 
+import os, sys
+sys.path_here = os.path.dirname(os.path.abspath(__file__)) + "/"
+
 gpu=0
 device = torch.device('cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu')
 
@@ -103,9 +106,9 @@ def plot_traj(traj, traj_hat, t_eval):
 dt = 0.02
 def get_model():
     model = SE3FVIN(device=device, time_step=dt).to(device)
-    path = './data/run1/quadrotor-se3fvin-vin-5p5-40000.tar'
+    path = sys.path_here + './data/run1/quadrotor-se3fvin-vin-5p5-40000.tar'
     model.load_state_dict(torch.load(path, map_location=device))
-    path = './data/run1/quadrotor-se3fvin-vin-5p-stats.pkl'
+    path = sys.path_here + './data/run1/quadrotor-se3fvin-vin-5p-stats.pkl'
     stats = from_pickle(path)
     return model, stats
 
@@ -146,7 +149,7 @@ y0_u = torch.cat((y0_u, y0_u), dim = 0)
 
 # Roll out our dynamics model from the initial state
 model, stats = get_model()
-y = model.predict(time_step-1, y0_u, gt=False)
+y = model.predict_traininga(time_step-1, y0_u, gt=False)
 y = y.detach().cpu().numpy()
 y = y[:,0,:]
 pose = torch.tensor(y[:,0:12], requires_grad=True, dtype=torch.float64).to(device)
@@ -183,7 +186,7 @@ plt.ylim(total_energy_learned[0] - 0.2, total_energy_learned[0] + 0.2)
 plt.xticks(fontsize=fontsize_ticks)
 plt.yticks(fontsize=fontsize_ticks)
 plt.legend(fontsize=fontsize)
-plt.savefig('./png/hamiltonian.pdf', bbox_inches='tight', pad_inches=0.1)
+plt.savefig(sys.path_here + './png/hamiltonian.pdf', bbox_inches='tight', pad_inches=0.1)
 plt.show()
 
 # Check SE(3) constraints
@@ -208,5 +211,5 @@ plt.xticks(fontsize=fontsize_ticks)
 plt.yticks(fontsize=fontsize_ticks)
 ax.yaxis.set_major_formatter(mtick.FormatStrFormatter(r'$%.0e$'))
 plt.legend(fontsize=fontsize)
-plt.savefig('./png/SE3_constraints.pdf', bbox_inches='tight')
+plt.savefig(sys.path_here + './png/SE3_constraints.pdf', bbox_inches='tight')
 plt.show()

@@ -5,6 +5,9 @@ import scipy.integrate
 solve_ivp = scipy.integrate.solve_ivp
 from LieFVIN import L2_loss, from_pickle, MLP, PSD, SE3FVIN
 
+import os, sys
+sys.path_here = os.path.dirname(os.path.abspath(__file__)) + "/"
+
 plt.rcParams['pdf.fonttype'] = 42
 plt.rcParams['ps.fonttype'] = 42
 plt.rcParams['text.usetex'] = True
@@ -16,9 +19,9 @@ def get_model(load = True):
     model = SE3FVIN(device=device, time_step = dt).to(device)
     stats = None
     if load:
-        path = './data/run1/quadrotor-se3fvin-vin-5p5-40000.tar'
+        path = sys.path_here + './data/run1/quadrotor-se3fvin-vin-5p5-40000.tar'
         model.load_state_dict(torch.load(path, map_location=device))
-        path = './data/run1/quadrotor-se3fvin-vin-5p-stats.pkl'
+        path = sys.path_here + './data/run1/quadrotor-se3fvin-vin-5p-stats.pkl'
         stats = from_pickle(path)
     return model, stats
 
@@ -51,7 +54,7 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
-    plt.savefig('./png/loss_log.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(sys.path_here + './png/loss_log.pdf', bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
     # Roll out learned dynamics
@@ -61,9 +64,9 @@ if __name__ == "__main__":
     train_x_torch = torch.tensor(train_x, requires_grad=True, device=device)
     test_x_torch = torch.tensor(test_x, requires_grad=True, device=device)
     for traj in range(train_x.shape[0]):
-        traj_x_hat = model.predict(train_x.shape[1]-1, train_x_torch[traj, 0, :, :], gt=ground_truth)
+        traj_x_hat = model.predict_traininga(train_x.shape[1]-1, train_x_torch[traj, 0, :, :], gt=ground_truth)
         train_x_hat.append(traj_x_hat.detach().cpu().numpy())
-        test_traj_x_hat = model.predict(test_x.shape[1] - 1, test_x_torch[traj, 0, :, :], gt=ground_truth)
+        test_traj_x_hat = model.predict_traininga(test_x.shape[1] - 1, test_x_torch[traj, 0, :, :], gt=ground_truth)
         test_x_hat.append(test_traj_x_hat.detach().cpu().numpy())
     train_x_hat = np.array(train_x_hat)
     test_x_hat = np.array(test_x_hat)
@@ -92,7 +95,7 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
-    plt.savefig('./png/SO3_constraints_test.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(sys.path_here + './png/SO3_constraints_test.pdf', bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
     # This is the generalized coordinates q = pose
@@ -115,7 +118,7 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
-    plt.savefig('./png/V_x.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(sys.path_here + './png/V_x.pdf', bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
     # Plot M1^-1(q)
@@ -138,7 +141,7 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
-    plt.savefig('./png/M1_x_all.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(sys.path_here + './png/M1_x_all.pdf', bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
     # Plot M2^-1(q)
@@ -160,7 +163,7 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize, loc = 'lower right')
-    plt.savefig('./png/M2_x_all.pdf', bbox_inches='tight')
+    plt.savefig(sys.path_here + './png/M2_x_all.pdf', bbox_inches='tight')
     plt.show()
 
     # Plot g_v(q)
@@ -174,7 +177,7 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
-    plt.savefig('./png/g_v_x.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(sys.path_here + './png/g_v_x.pdf', bbox_inches='tight', pad_inches=0.1)
     plt.show()
 
     # Plot g_omega(q)
@@ -199,5 +202,5 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.legend(fontsize=fontsize)
-    plt.savefig('./png/g_w_x.pdf', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(sys.path_here + './png/g_w_x.pdf', bbox_inches='tight', pad_inches=0.1)
     plt.show()
