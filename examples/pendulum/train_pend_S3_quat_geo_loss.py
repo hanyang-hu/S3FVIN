@@ -14,12 +14,13 @@ sys.path.append(PARENT_DIR)
 from LieFVIN import S3FVIN
 from data import get_dataset, arrange_data
 from LieFVIN import to_pickle, rotmat_L2_geodesic_loss
+from LieFVIN import quat_L2_geodesic_loss, batch_rotmat_to_quat
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('--learn_rate', default=1e-2, type=float, help='learning rate')
     parser.add_argument('--nonlinearity', default='tanh', type=str, help='neural net nonlinearity')
-    parser.add_argument('--total_steps', default=6000, type=int, help='number of gradient steps')
+    parser.add_argument('--total_steps', default=10000, type=int, help='number of gradient steps')
     parser.add_argument('--print_every', default=100, type=int, help='number of gradient steps between prints')
     parser.add_argument('--name', default='pendulum', type=str, help='environment name')
     parser.add_argument('--verbose', dest='verbose', action='store_true', help='verbose?')
@@ -36,6 +37,7 @@ def get_args():
 def get_model_parm_nums(model):
     total = sum([param.nelement() for param in model.parameters()])
     return total
+
 
 
 def train(args):
@@ -69,6 +71,18 @@ def train(args):
     test_x_cat = torch.tensor(test_x_cat, requires_grad=True, dtype=torch.float64).to(device)
     t_eval = torch.tensor(t_eval, requires_grad=True, dtype=torch.float64).to(device)
 
+    with torch.no_grad():
+        # Convert rotation matrices to quaternions
+        train_rotmats = train_x_cat[:, :, :9].reshape(-1, 3, 3)
+        train_quats = batch_rotmat_to_quat(train_rotmats).reshape(train_x_cat.shape[0], train_x_cat.shape[1], 4)
+        train_x_cat = torch.cat((train_quats, train_x_cat[:, :, 9:]), dim=2)
+        test_rotmats = test_x_cat[:, :, :9].reshape(-1, 3, 3)
+        test_quats = batch_rotmat_to_quat(test_rotmats).reshape(test_x_cat.shape[0], test_x_cat.shape[1], 4)
+        test_x_cat = torch.cat((test_quats, test_x_cat[:, :, 9:]), dim=2)
+
+    train_x_cat = train_x_cat.requires_grad_(True)
+    test_x_cat = test_x_cat.requires_grad_(True)
+
     # Training stats
     stats = {'train_loss': [], 'test_loss': [], 'forward_time': [], 'backward_time': [], 'nfe': [], 'train_l2_loss': [],\
              'test_l2_loss':[], 'train_geo_loss':[], 'test_geo_loss':[]}
@@ -86,12 +100,13 @@ def train(args):
         t = time.time()
         
         # Predict states
-        train_x_hat = model.predict(args.num_points-1, train_x_cat[0, :, :], output_rep='rotmat')
+        train_x_hat = model.predict(args.num_points-1, train_x_cat[0, :, :])
 
         target = train_x_cat[1:, :, :]
         target_hat = train_x_hat[1:, :, :]
         # Calculate loss
-        train_loss_mini, l2_loss_mini, geo_loss_mini = rotmat_L2_geodesic_loss(target, target_hat, split=[model.rotmatdim, model.angveldim, model.u_dim]) #L2_loss(target, target_hat)#
+        # train_loss_mini, l2_loss_mini, geo_loss_mini = rotmat_L2_geodesic_loss(target, target_hat, split=[model.rotmatdim, model.angveldim, model.u_dim])
+        train_loss_mini, l2_loss_mini, geo_loss_mini = quat_L2_geodesic_loss(target, target_hat, split=[model.quatdim, model.angveldim, model.u_dim]) 
         train_loss = train_loss + train_loss_mini
         train_l2_loss = train_l2_loss + l2_loss_mini
         train_geo_loss = train_geo_loss + geo_loss_mini
@@ -110,10 +125,11 @@ def train(args):
         backward_time = time.time() - t
 
         # Calculate loss for test data
-        test_x_hat = model.predict(args.num_points-1, test_x_cat[0, :, :], output_rep='rotmat')
+        test_x_hat = model.predict(args.num_points-1, test_x_cat[0, :, :])
         target = test_x_cat[1:, :, :]
         target_hat = test_x_hat[1:, :, :]
-        test_loss_mini, l2_loss_mini, geo_loss_mini = rotmat_L2_geodesic_loss(target, target_hat, split=[model.rotmatdim, model.angveldim, 1])
+        # test_loss_mini, l2_loss_mini, geo_loss_mini = rotmat_L2_geodesic_loss(target, target_hat, split=[model.rotmatdim, model.angveldim, 1])
+        test_loss_mini, l2_loss_mini, geo_loss_mini = quat_L2_geodesic_loss(target, target_hat, split=[model.quatdim, model.angveldim, 1])
         test_loss = test_loss + test_loss_mini
         test_l2_loss = test_l2_loss + l2_loss_mini
         test_geo_loss = test_geo_loss + geo_loss_mini
@@ -128,7 +144,6 @@ def train(args):
         stats['backward_time'].append(backward_time)
         stats['nfe'].append(model.nfe)
 
-        # pbar.set_postfix({'train_loss': f'{train_loss.item():.4e}', 'test_loss': f'{test_loss.item():.4e}'})
         pbar.set_postfix({'train_geo_loss': train_geo_loss.item(), 'train_L2_loss': train_l2_loss.item()})
 
     return model, stats

@@ -139,7 +139,7 @@ def train(args):
         #                                                                         test_geo_loss.item()))
         #     print("step {}, nfe {:.4e}".format(step, model.nfe))
 
-        pbar.set_postfix({'train_loss': f'{train_loss.item():.4e}', 'test_loss': f'{test_loss.item():.4e}'})
+        pbar.set_postfix({'train_geo_loss': train_geo_loss.item(), 'train_L2_loss': train_l2_loss.item()})
 
     return model, stats
 

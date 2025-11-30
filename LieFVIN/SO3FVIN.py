@@ -36,7 +36,7 @@ class SO3FVIN(torch.nn.Module):
             self.g_net = g_net
         self.allow_unused = allow_unused
         self.device = device
-        self.implicit_step = 4
+        self.implicit_step = 5
         self.nfe = 0
 
     def forward(self, x):
