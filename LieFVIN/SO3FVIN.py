@@ -36,7 +36,7 @@ class SO3FVIN(torch.nn.Module):
             self.g_net = g_net
         self.allow_unused = allow_unused
         self.device = device
-        self.implicit_step = 5
+        self.implicit_step = 4
         self.nfe = 0
 
     def forward(self, x):
@@ -57,6 +57,7 @@ class SO3FVIN(torch.nn.Module):
                     fk_minus = self.h * g_qk * uk / 2
                     fk_plus = self.h * g_qk * uk / 2
                 else:
+                    # print(g_qk.shape, uk.shape)
                     fk_minus = self.h * torch.squeeze(torch.matmul(g_qk, torch.unsqueeze(uk))) / 2
                     fk_plus = self.h*torch.squeeze(torch.matmul(g_qk, torch.unsqueeze(uk)))/2
             else:
@@ -86,6 +87,9 @@ class SO3FVIN(torch.nn.Module):
 
             a = self.h*pk + (1-alpha)*self.h**2 * Mk + self.h *fk_minus
             v = torch.zeros_like(a)
+            # import time
+            # t0 = time.time()
+            # torch.cuda.synchronize()
             for i in range(self.implicit_step):
                 aTv = torch.unsqueeze(torch.sum(a*v, dim = 1), dim = 1)
                 # temp1= torch.cross(a,v, dim=1)
@@ -97,6 +101,10 @@ class SO3FVIN(torch.nn.Module):
                 dphi = hat_map_batch(a) + aTv[:,:,None]*I33 - 2*M_q + torch.matmul(v[:,:,None], torch.transpose(a[:,:,None], 1,2))
                 dphi_inv = torch.inverse(dphi)
                 v = v - torch.squeeze(torch.matmul(dphi_inv, phi[:,:,None]))
+                # print(f"Implicit step {i}, norm of phi: {torch.norm(phi, dim=1).max().item():.6e}")
+            # torch.cuda.synchronize()
+            # t1 = time.time()
+            # print(f"Implicit solve time: {t1 - t0:.6f} seconds")
 
             Fk0 = torch.matmul((I33 + hat_map_batch(v)), torch.inverse((I33 - hat_map_batch(v))))
             Sv = hat_map_batch(v)

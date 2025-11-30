@@ -4,7 +4,6 @@ import torch, argparse
 import numpy as np
 import os, sys
 import time
-
 import tqdm
 
 
@@ -12,10 +11,9 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__)) + '/data/run1'
 PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PARENT_DIR)
 
-from LieFVIN import MLP, PSD
-from LieFVIN import SO3FVIN
+from LieFVIN import S3FVIN
 from data import get_dataset, arrange_data
-from LieFVIN import to_pickle, rotmat_L2_geodesic_loss, traj_rotmat_L2_geodesic_loss
+from LieFVIN import to_pickle, rotmat_L2_geodesic_loss
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
@@ -53,8 +51,8 @@ def train(args):
     # Initialize the model
     if args.verbose:
         print("Start training with num of points = {} and solver {}.".format(args.num_points, args.solver))
-    model = SO3FVIN(device=device, u_dim = 1, time_step = dt).to(device)
-    # path = './data/pendulum-so3ham-vin-10p-10000.tar'
+    model = S3FVIN(device=device, u_dim=1, time_step=dt).to(device)
+    # path = './data/pendulum-s3ham-vin-10p-10000.tar'
     # model.load_state_dict(torch.load(path, map_location=device))
     num_parm = get_model_parm_nums(model)
     print('model contains {} parameters'.format(num_parm))
@@ -69,8 +67,6 @@ def train(args):
     test_x_cat = np.concatenate(test_x, axis=1)
     train_x_cat = torch.tensor(train_x_cat, requires_grad=True, dtype=torch.float64).to(device)
     test_x_cat = torch.tensor(test_x_cat, requires_grad=True, dtype=torch.float64).to(device)
-    # train_x = torch.tensor(train_x, requires_grad=True, dtype=torch.float64).to(device)
-    # test_x = torch.tensor(test_x, requires_grad=True, dtype=torch.float64).to(device)
     t_eval = torch.tensor(t_eval, requires_grad=True, dtype=torch.float64).to(device)
 
     # Training stats
@@ -78,7 +74,6 @@ def train(args):
              'test_l2_loss':[], 'train_geo_loss':[], 'test_geo_loss':[]}
 
     # Start training
-    ground_truth = False
     pbar = tqdm.tqdm(range(0, args.total_steps + 1), desc='Training', ncols=100)
     for step in pbar:
         train_loss = 0
@@ -89,9 +84,10 @@ def train(args):
         test_geo_loss = 0
 
         t = time.time()
+        
         # Predict states
-        train_x_hat = model.predict(args.num_points-1, train_x_cat[0, :, :], gt=ground_truth)
-        # print(train_x_cat[0,:,:].shape, train_x_cat[1:,:,:].shape)
+        train_x_hat = model.predict(args.num_points-1, train_x_cat[0, :, :], output_rep='rotmat')
+
         target = train_x_cat[1:, :, :]
         target_hat = train_x_hat[1:, :, :]
         # Calculate loss
@@ -102,7 +98,7 @@ def train(args):
 
         if step % (args.print_every*10) == 0:
             os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-            label = '-so3ham'
+            label = '-s3ham'
             path = '{}/{}{}-{}-{}p-{}.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points, step)
             torch.save(model.state_dict(), path)
 
@@ -114,7 +110,7 @@ def train(args):
         backward_time = time.time() - t
 
         # Calculate loss for test data
-        test_x_hat = model.predict(args.num_points-1, test_x_cat[0, :, :], gt=ground_truth)
+        test_x_hat = model.predict(args.num_points-1, test_x_cat[0, :, :], output_rep='rotmat')
         target = test_x_cat[1:, :, :]
         target_hat = test_x_hat[1:, :, :]
         test_loss_mini, l2_loss_mini, geo_loss_mini = rotmat_L2_geodesic_loss(target, target_hat, split=[model.rotmatdim, model.angveldim, 1])
@@ -131,13 +127,6 @@ def train(args):
         stats['test_geo_loss'].append(test_geo_loss.item())
         stats['backward_time'].append(backward_time)
         stats['nfe'].append(model.nfe)
-        # if step % args.print_every == 0:
-        #     print("step {}, train_loss {:.4e}, test_loss {:.4e}".format(step, train_loss.item(), test_loss.item()))
-        #     print("step {}, train_l2_loss {:.4e}, test_l2_loss {:.4e}".format(step, train_l2_loss.item(),
-        #                                                                       test_l2_loss.item()))
-        #     print("step {}, train_geo_loss {:.4e}, test_geo_loss {:.4e}".format(step, train_geo_loss.item(),
-        #                                                                         test_geo_loss.item()))
-        #     print("step {}, nfe {:.4e}".format(step, model.nfe))
 
         pbar.set_postfix({'train_loss': f'{train_loss.item():.4e}', 'test_loss': f'{test_loss.item():.4e}'})
 
@@ -150,7 +139,7 @@ if __name__ == "__main__":
 
     # Save model
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-    label = '-so3ham'
+    label = '-s3ham'
     path = '{}/{}{}-{}-{}p.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points)
     torch.save(model.state_dict(), path)
     path = '{}/{}{}-{}-{}p-stats.pkl'.format(args.save_dir, args.name, label, args.solver, args.num_points)
