@@ -1,5 +1,6 @@
 import torch
-import kornia
+import tqdm
+import gc
 
 from LieFVIN import MLP, PSD
 
@@ -152,7 +153,7 @@ def quat_L2_geodesic_loss(target, target_hat, split):
     return total, l2_loss, geo_loss
 
 class S3FVIN(torch.nn.Module):
-    def __init__(self, J_net=None, V_net=None, g_net=None, device=None, u_dim=1, time_step=0.01, init_gain=1, enable_force=True):
+    def __init__(self, J_net=None, V_net=None, g_net=None, device=None, u_dim=1, time_step=0.01, init_gain=1, enable_force=True, fixed_J=False):
         assert u_dim == 1, "Currently only u_dim=1 is supported."
 
         super(S3FVIN, self).__init__()
@@ -176,9 +177,10 @@ class S3FVIN(torch.nn.Module):
         else:
             self.g_net = g_net
         self.device = device
-        self.implicit_step = 50
+        self.implicit_step = 5
 
         self.enable_force = enable_force
+        self.fixed_J = fixed_J
 
         self.nfe = 0
 
@@ -190,7 +192,7 @@ class S3FVIN(torch.nn.Module):
 
             qk, wk, uk = torch.split(x, [self.quatdim, self.angveldim, self.u_dim], dim=1) # (B,4), (B,3), (B,u_dim)
             # qk = qk / torch.norm(qk, dim=1, keepdim=True)  # normalize quaternion to avoid error accumulation
-            J_q_inv = self.J_net(qk)
+            J_q_inv = self.J_net(qk) if not self.fixed_J else self.J_net(torch.ones_like(qk))  # (B,3,3)
             g_qk = self.g_net(qk)
 
             if self.enable_force:
@@ -215,8 +217,8 @@ class S3FVIN(torch.nn.Module):
                 LHS = torch.bmm(torch.bmm(G_batch(q_xi), J_q), quat_im_batch(q_xi).unsqueeze(-1)).squeeze(-1)
                 residual = LHS - RHS  # (B,3)
 
-                if torch.norm(residual, dim=1).max().item() < 1e-16:
-                    break
+                # if torch.norm(residual, dim=1).max().item() < 1e-16:
+                #     break
 
                 # Compute batched Jacobian using autograd
                 jacobian = torch.zeros(B, 3, 3, device=self.device, dtype=torch.float64)
@@ -312,7 +314,7 @@ class S3FVIN(torch.nn.Module):
 
             return torch.cat((qk_next, wk_next, uk), dim=1)
         
-    def predict(self, step_num, x, output_rep='quat'):
+    def predict(self, step_num, x, output_rep='quat', verbose=False):
         assert output_rep in ['quat', 'rotmat'], "output_rep must be 'quat' or 'rotmat'"
 
         if output_rep == 'rotmat':
@@ -324,8 +326,12 @@ class S3FVIN(torch.nn.Module):
         xseq = x[None,:,:]
         curx = x
 
-        for _ in range(step_num):
+        pbar = tqdm.tqdm(range(step_num)) if verbose else range(step_num)
+        for _ in pbar:
             nextx = self.forward(curx)
+
+            # if not self.training:
+            #     nextx[:, :self.quatdim] = nextx[:, :self.quatdim] / torch.norm(nextx[:, :self.quatdim], dim=1, keepdim=True)  # normalize quaternion to avoid error accumulation
 
             # # Ensure the sign of nextx is consistent with curx
             # dot = torch.sum(curx * nextx, dim=1, keepdim=True)
@@ -333,6 +339,12 @@ class S3FVIN(torch.nn.Module):
 
             curx = nextx
             xseq = torch.cat((xseq, curx[None,:,:]), dim = 0)
+
+            if not self.training:
+                torch.cuda.empty_cache()
+                gc.collect()
+                curx = curx.detach()
+                curx.requires_grad_(True)
 
         if output_rep == 'rotmat':
             quat_seq = xseq[:, :, :self.quatdim].reshape(-1, self.quatdim)

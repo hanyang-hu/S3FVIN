@@ -17,7 +17,7 @@ from LieFVIN import to_pickle, rotmat_L2_geodesic_loss
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
-    parser.add_argument('--learn_rate', default=1e-2, type=float, help='learning rate')
+    parser.add_argument('--learn_rate', default=1e-3, type=float, help='learning rate')
     parser.add_argument('--nonlinearity', default='tanh', type=str, help='neural net nonlinearity')
     parser.add_argument('--total_steps', default=6000, type=int, help='number of gradient steps')
     parser.add_argument('--print_every', default=100, type=int, help='number of gradient steps between prints')
@@ -29,6 +29,7 @@ def get_args():
     parser.add_argument('--num_points', type=int, default=10,
                         help='number of evaluation points by the ODE solver, including the initial point')
     parser.add_argument('--solver', default='vin', type=str, help='type of ODE Solver for Neural ODE')
+    parser.add_argument('--fixed_J', dest='fixed_J', action='store_true', help='use fixed J matrix?')
     parser.set_defaults(feature=True)
     return parser.parse_args()
 
@@ -51,7 +52,9 @@ def train(args):
     # Initialize the model
     if args.verbose:
         print("Start training with num of points = {} and solver {}.".format(args.num_points, args.solver))
-    model = S3FVIN(device=device, u_dim=1, time_step=dt).to(device)
+    model = S3FVIN(device=device, u_dim=1, time_step=dt, fixed_J=args.fixed_J).to(device)
+    if model.fixed_J:
+        print("Using fixed inertia matrix J during training.")
     # path = './data/pendulum-s3ham-vin-10p-10000.tar'
     # model.load_state_dict(torch.load(path, map_location=device))
     num_parm = get_model_parm_nums(model)
@@ -98,7 +101,7 @@ def train(args):
 
         if step % (args.print_every*10) == 0:
             os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-            label = '-s3ham'
+            label = '-s3ham_fixed_J' if model.fixed_J else '-s3ham'
             path = '{}/{}{}-{}-{}p-{}.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points, step)
             torch.save(model.state_dict(), path)
 
@@ -140,7 +143,7 @@ if __name__ == "__main__":
 
     # Save model
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-    label = '-s3ham'
+    label = '-s3ham' if not model.fixed_J else '-s3ham_fixed_J'
     path = '{}/{}{}-{}-{}p.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points)
     torch.save(model.state_dict(), path)
     path = '{}/{}{}-{}-{}p-stats.pkl'.format(args.save_dir, args.name, label, args.solver, args.num_points)
