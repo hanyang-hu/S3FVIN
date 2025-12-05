@@ -1,6 +1,63 @@
 import torch
 import numpy as np
 from LieFVIN import MLP, PSD, MatrixNet, hat_map, vee_map, hat_map_batch
+import kornia
+
+
+def batch_rotmat_to_axis_angle(R):
+    """Batched rotation matrix to axis-angle representation"""
+    B = R.shape[0]
+    axis_angle = torch.zeros(B, 3, device=R.device, dtype=R.dtype)
+
+    R = R.view(-1, 3, 3) # ensure shape
+
+    return kornia.geometry.conversions.rotation_matrix_to_axis_angle(R)
+
+
+def batch_rotmat_to_quat(R):
+    """Batched rotation matrix to quaternion (w,x,y,z) Hamilton convention"""
+    B = R.shape[0]
+    q = torch.zeros(B, 4, device=R.device, dtype=R.dtype)
+
+    R = R.view(-1, 3, 3) # ensure shape
+
+    return kornia.geometry.conversions.rotation_matrix_to_quaternion(R)
+
+    # trace = R[:,0,0] + R[:,1,1] + R[:,2,2]
+
+    # # Case 1: trace > 0
+    # mask = trace > 0
+    # S = torch.sqrt(trace[mask] + 1.0) * 2  # S=4*w
+    # q[mask,0] = 0.25 * S
+    # q[mask,1] = (R[mask,2,1] - R[mask,1,2]) / S
+    # q[mask,2] = (R[mask,0,2] - R[mask,2,0]) / S
+    # q[mask,3] = (R[mask,1,0] - R[mask,0,1]) / S
+
+    # # Case 2: R[0,0] is the largest diagonal
+    # mask = (R[:,0,0] > R[:,1,1]) & (R[:,0,0] > R[:,2,2]) & (trace <= 0)
+    # S = torch.sqrt(1.0 + R[mask,0,0] - R[mask,1,1] - R[mask,2,2]) * 2  # S=4*x
+    # q[mask,0] = (R[mask,2,1] - R[mask,1,2]) / S
+    # q[mask,1] = 0.25 * S
+    # q[mask,2] = (R[mask,0,1] + R[mask,1,0]) / S
+    # q[mask,3] = (R[mask,0,2] + R[mask,2,0]) / S
+
+    # # Case 3: R[1,1] is the largest diagonal
+    # mask = (R[:,1,1] > R[:,2,2]) & (trace <= 0) & ~( (R[:,0,0] > R[:,1,1]) & (R[:,0,0] > R[:,2,2]) )
+    # S = torch.sqrt(1.0 + R[mask,1,1] - R[mask,0,0] - R[mask,2,2]) * 2  # S=4*y
+    # q[mask,0] = (R[mask,0,2] - R[mask,2,0]) / S
+    # q[mask,1] = (R[mask,0,1] + R[mask,1,0]) / S
+    # q[mask,2] = 0.25 * S
+    # q[mask,3] = (R[mask,1,2] + R[mask,2,1]) / S
+
+    # # Case 4: R[2,2] is the largest diagonal
+    # mask = (R[:,2,2] >= R[:,0,0]) & (R[:,2,2] >= R[:,1,1]) & (trace <= 0)
+    # S = torch.sqrt(1.0 + R[mask,2,2] - R[mask,0,0] - R[mask,1,1]) * 2  # S=4*z
+    # q[mask,0] = (R[mask,1,0] - R[mask,0,1]) / S
+    # q[mask,1] = (R[mask,0,2] + R[mask,2,0]) / S
+    # q[mask,2] = (R[mask,1,2] + R[mask,2,1]) / S
+    # q[mask,3] = 0.25 * S
+
+    # return q
 
 
 class SO3FVIN(torch.nn.Module):
@@ -11,33 +68,96 @@ class SO3FVIN(torch.nn.Module):
     u is a tensor of size (bs, 1).
     '''
 
-    def __init__(self, M_net = None, V_net = None, g_net = None, device=None, u_dim=3, time_step = 0.01, init_gain=1, allow_unused = False):
+    def __init__(self, M_net = None, V_net = None, g_net = None, device=None, u_dim=3, time_step = 0.01, init_gain=1, allow_unused = False, quat_sym = True, axis_sym = False):
         super(SO3FVIN, self).__init__()
         self.rotmatdim = 9
         self.angveldim = 3
-        if M_net is None:
-            self.M_net = PSD(self.rotmatdim, 10, self.angveldim, init_gain=init_gain).to(device)
-        else:
-            self.M_net = M_net
-        if V_net is None:
-            self.V_net = MLP(self.rotmatdim, 10, 1, init_gain=init_gain).to(device)
-        else:
-            self.V_net = V_net
+        self.quatdim = 4
 
         self.u_dim = u_dim
         self.h = time_step
-        if g_net is None:
-            if u_dim == 1:
-                self.g_net = MLP(self.rotmatdim, 10, self.angveldim).to(device)
+
+        if not quat_sym:
+            if not axis_sym:
+                print("No symmetry for SO3FVIN")
+                if M_net is None:
+                    self.M_net = PSD(self.rotmatdim, 10, self.angveldim, init_gain=init_gain).to(device)
+                else:
+                    self.M_net = M_net
+                if V_net is None:
+                    self.V_net = MLP(self.rotmatdim, 10, 1, init_gain=init_gain).to(device)
+                else:
+                    self.V_net = V_net
+
+                if g_net is None:
+                    if u_dim == 1:
+                        self.g_net = MLP(self.rotmatdim, 10, self.angveldim).to(device)
+                    else:
+                        self.g_net = MatrixNet(self.rotmatdim, 10, self.angveldim * self.u_dim,
+                                            shape=(self.angveldim, self.u_dim), init_gain=init_gain).to(device)
+                else:
+                    self.g_net = g_net
             else:
-                self.g_net = MatrixNet(self.rotmatdim, 10, self.angveldim * self.u_dim,
-                                       shape=(self.angveldim, self.u_dim), init_gain=init_gain).to(device)
+                print("Using axis-angle representation for SO3FVIN")
+                if M_net is None:
+                    self.M_net_internal = PSD(3, 10, self.angveldim, init_gain=init_gain).to(device)
+                else:
+                    self.M_net_internal = M_net
+                self.M_net_eval = lambda aa: 0.5 * (self.M_net_internal(aa) + self.M_net_internal(-aa))
+                self.M_net = lambda R : self.M_net_eval(batch_rotmat_to_axis_angle(R))
+                if V_net is None:
+                    self.V_net_internal = MLP(3, 10, 1, init_gain=init_gain).to(device)
+                else:
+                    self.V_net_internal = V_net
+                self.V_net_eval = lambda aa: 0.5 * (self.V_net_internal(aa) + self.V_net_internal(-aa))
+                self.V_net = lambda R : self.V_net_eval(batch_rotmat_to_axis_angle(R))
+                if g_net is None:
+                    if u_dim == 1:
+                        self.g_net_internal = MLP(3, 10, self.angveldim).to(device)
+                    else:
+                        self.g_net_internal = MatrixNet(3, 10, self.angveldim * self.u_dim,
+                                            shape=(self.angveldim, self.u_dim), init_gain=init_gain).to(device)
+                else:
+                    self.g_net_internal = g_net
+                self.g_net_eval = lambda aa: 0.5 * (self.g_net_internal(aa) + self.g_net_internal(-aa))
+                self.g_net = lambda R : self.g_net_eval(batch_rotmat_to_axis_angle(R))
+
         else:
-            self.g_net = g_net
+            print("Using quaternion symmetry for SO3FVIN")
+            if M_net is None:
+                self.M_net_internal = PSD(self.quatdim, 10, self.angveldim, init_gain=init_gain).to(device)
+            else:
+                self.M_net_internal = M_net
+            self.M_net_q_eval = lambda q : 0.5 * (self.M_net_internal(q) + self.M_net_internal(-q))
+            self.M_net = lambda R : self.M_net_q_eval(batch_rotmat_to_quat(R))
+
+            if V_net is None:
+                self.V_net_internal = MLP(self.quatdim, 10, 1, init_gain=init_gain).to(device)
+            else:
+                self.V_net_internal = V_net
+            self.V_net_q_eval = lambda q : 0.5 * (self.V_net_internal(q) + self.V_net_internal(-q))
+            self.V_net = lambda R : self.V_net_q_eval(batch_rotmat_to_quat(R))
+
+            if g_net is None:
+                if u_dim == 1:
+                    self.g_net_internal = MLP(self.quatdim, 10, self.angveldim).to(device)
+                else:
+                    self.g_net_internal = MatrixNet(self.quatdim, 10, self.angveldim * self.u_dim,
+                                        shape=(self.angveldim, self.u_dim), init_gain=init_gain).to(device)
+            else:
+                self.g_net_internal = g_net
+            self.g_net_q_eval = lambda q : 0.5 * (self.g_net_internal(q) + self.g_net_internal(-q))
+            self.g_net = lambda R : self.g_net_q_eval(batch_rotmat_to_quat(R))
+
+
+        
+
         self.allow_unused = allow_unused
         self.device = device
         self.implicit_step = 5
         self.nfe = 0
+        self.quat_sym = quat_sym
+        self.axis_sym = axis_sym
 
     def forward(self, x):
         enable_force = True

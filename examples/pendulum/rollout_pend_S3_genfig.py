@@ -114,17 +114,20 @@ t_eval = torch.linspace(t_span[0], t_span[1], n_eval)
 init_angle = np.pi/2
 u0 = 0.0
 
-fixed_J = True
+fixed_J = False
+quat_sym = False
 
+label = '-s3ham' if not fixed_J else '-s3ham_fixed_J'
+if quat_sym:
+    label += '_quat_sym'
 
 def get_model(load = True):
-    model = S3FVIN(device=device, u_dim = 1, time_step = dt, fixed_J=fixed_J).to(device)
+    model = S3FVIN(device=device, u_dim = 1, time_step = dt, fixed_J=fixed_J, quat_sym=quat_sym).to(device)
     stats = None
     if load:
-        path = sys.path_here + 'data/run1/pendulum-s3ham-vin-10p-6000.tar' if not fixed_J else sys.path_here + 'data/run1/pendulum-s3ham_fixed_J-vin-10p-6000.tar'
+        path = sys.path_here + 'data/run1/pendulum{}-vin-10p-6000.tar'.format(label)
         model.load_state_dict(torch.load(path, map_location=device))
     return model, None
-
 
 
 
@@ -239,7 +242,7 @@ for i in range(len(y)):
 
 figsize = (12, 7.8)
 fontsize = 24
-fontsize_ticks = 32
+fontsize_ticks = 28
 line_width = 4
 fig = plt.figure(figsize=figsize)
 ax = fig.add_subplot(111)

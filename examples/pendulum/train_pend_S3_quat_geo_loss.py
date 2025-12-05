@@ -18,9 +18,9 @@ from LieFVIN import quat_L2_geodesic_loss, batch_rotmat_to_quat
 
 def get_args():
     parser = argparse.ArgumentParser(description=None)
-    parser.add_argument('--learn_rate', default=1e-2, type=float, help='learning rate')
+    parser.add_argument('--learn_rate', default=1e-3, type=float, help='learning rate')
     parser.add_argument('--nonlinearity', default='tanh', type=str, help='neural net nonlinearity')
-    parser.add_argument('--total_steps', default=10000, type=int, help='number of gradient steps')
+    parser.add_argument('--total_steps', default=6000, type=int, help='number of gradient steps')
     parser.add_argument('--print_every', default=100, type=int, help='number of gradient steps between prints')
     parser.add_argument('--name', default='pendulum', type=str, help='environment name')
     parser.add_argument('--verbose', dest='verbose', action='store_true', help='verbose?')
@@ -113,7 +113,7 @@ def train(args):
 
         if step % (args.print_every*10) == 0:
             os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-            label = '-s3ham'
+            label = '-s3ham_quat_geo_loss'
             path = '{}/{}{}-{}-{}p-{}.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points, step)
             torch.save(model.state_dict(), path)
 
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
     # Save model
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-    label = '-s3ham'
+    label = '-s3ham_quat_geo_loss'
     path = '{}/{}{}-{}-{}p.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points)
     torch.save(model.state_dict(), path)
     path = '{}/{}{}-{}-{}p-stats.pkl'.format(args.save_dir, args.name, label, args.solver, args.num_points)

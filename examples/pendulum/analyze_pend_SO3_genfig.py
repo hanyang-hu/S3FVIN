@@ -17,14 +17,15 @@ plt.rcParams['text.usetex'] = True
 gpu=0
 device = torch.device('cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu')
 dt = 0.02
+quat_sym = True
 
 def get_model(load = True):
-    model = SO3FVIN(device=device, u_dim = 1, time_step = dt).to(device)
+    model = SO3FVIN(device=device, u_dim = 1, time_step = dt, quat_sym=quat_sym).to(device)
     stats = None
     if load:
-        path = 'data/run1/pendulum-so3ham-vin-10p-6000.tar'
+        path = 'data/run1/pendulum-so3ham-vin-10p-6000.tar' if not quat_sym else 'data/run1/pendulum-so3ham_quat_sym-vin-10p-6000.tar'
         model.load_state_dict(torch.load(sys.path_here + path, map_location=device))
-        path = 'data/run1/pendulum-so3ham-vin-10p-stats.pkl'
+        path = 'data/run1/pendulum-so3ham-vin-10p-stats.pkl' if not quat_sym else 'data/run1/pendulum-so3ham_quat_sym-vin-10p-stats.pkl'
         stats = from_pickle(sys.path_here + path)
     return model, stats
 

@@ -102,7 +102,8 @@ def train(args):
 
         if step % (args.print_every*10) == 0:
             os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
-            label = '-so3ham'
+            label = '-so3ham_axis_sym' if model.axis_sym else '-so3ham'
+            label = '-so3ham_quat_sym' if model.quat_sym else label
             path = '{}/{}{}-{}-{}p-{}.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points, step)
             torch.save(model.state_dict(), path)
 
@@ -110,6 +111,11 @@ def train(args):
         t = time.time()
         train_loss_mini.backward()
         optim.step()
+
+        # if step % 50 == 0:
+        #     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1e9)  # doesn't actually clip
+        #     print(f"Step {step} | grad norm = {grad_norm:.4e}")
+
         optim.zero_grad()
         backward_time = time.time() - t
 
@@ -151,6 +157,8 @@ if __name__ == "__main__":
     # Save model
     os.makedirs(args.save_dir) if not os.path.exists(args.save_dir) else None
     label = '-so3ham'
+    label = '-so3ham_quat_sym' if model.quat_sym else label
+    label = '-so3ham_axis_sym' if model.axis_sym else label
     path = '{}/{}{}-{}-{}p.tar'.format(args.save_dir, args.name, label, args.solver, args.num_points)
     torch.save(model.state_dict(), path)
     path = '{}/{}{}-{}-{}p-stats.pkl'.format(args.save_dir, args.name, label, args.solver, args.num_points)

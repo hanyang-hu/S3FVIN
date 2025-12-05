@@ -153,7 +153,7 @@ def quat_L2_geodesic_loss(target, target_hat, split):
     return total, l2_loss, geo_loss
 
 class S3FVIN(torch.nn.Module):
-    def __init__(self, J_net=None, V_net=None, g_net=None, device=None, u_dim=1, time_step=0.01, init_gain=1, enable_force=True, fixed_J=False):
+    def __init__(self, J_net=None, V_net=None, g_net=None, device=None, u_dim=1, time_step=0.01, init_gain=1, enable_force=True, fixed_J=False, quat_sym=True):
         assert u_dim == 1, "Currently only u_dim=1 is supported."
 
         super(S3FVIN, self).__init__()
@@ -181,6 +181,8 @@ class S3FVIN(torch.nn.Module):
 
         self.enable_force = enable_force
         self.fixed_J = fixed_J
+        self.quat_sym = quat_sym
+        self.auto_diff_jacobian = True
 
         self.nfe = 0
 
@@ -192,8 +194,14 @@ class S3FVIN(torch.nn.Module):
 
             qk, wk, uk = torch.split(x, [self.quatdim, self.angveldim, self.u_dim], dim=1) # (B,4), (B,3), (B,u_dim)
             # qk = qk / torch.norm(qk, dim=1, keepdim=True)  # normalize quaternion to avoid error accumulation
-            J_q_inv = self.J_net(qk) if not self.fixed_J else self.J_net(torch.ones_like(qk))  # (B,3,3)
-            g_qk = self.g_net(qk)
+            if self.quat_sym:
+                J_q_inv = 0.5 * (self.J_net(qk) + self.J_net(-qk))  # (B,3,3) # J(q) = J(-q)
+            else:
+                J_q_inv = self.J_net(qk) if not self.fixed_J else self.J_net(torch.ones_like(qk))  # (B,3,3)
+            if self.quat_sym:
+                g_qk = 0.5 * (self.g_net(qk) + self.g_net(-qk)) # f(q) = f(-q)
+            else:
+                g_qk = self.g_net(qk)
 
             if self.enable_force:
                 fk_minus = self.h * g_qk * uk / 2
@@ -205,7 +213,10 @@ class S3FVIN(torch.nn.Module):
             J_q = torch.inverse(J_q_inv)
             pk = 2 * torch.bmm(J_q, wk.unsqueeze(-1)).squeeze(-1)  # (B,3)
 
-            V_qk = self.V_net(qk)
+            if self.quat_sym:
+                V_qk = 0.5 * (self.V_net(qk) + self.V_net(-qk))  # V(q) = V(-q)
+            else:
+                V_qk = self.V_net(qk)
             dVk =  torch.autograd.grad(V_qk.sum(), qk, create_graph=True)[0] # (B,4)
 
             RHS = -self.h / 4 * (pk + fk_minus - self.h / 2 * torch.bmm(H_batch(qk), dVk.unsqueeze(-1)).squeeze(-1))  # (B,3)
@@ -220,11 +231,31 @@ class S3FVIN(torch.nn.Module):
                 # if torch.norm(residual, dim=1).max().item() < 1e-16:
                 #     break
 
-                # Compute batched Jacobian using autograd
-                jacobian = torch.zeros(B, 3, 3, device=self.device, dtype=torch.float64)
-                for j in range(3):
-                    grad = torch.autograd.grad(residual[:, j].sum(), xi, retain_graph=True, create_graph=True)[0]
-                    jacobian[:, j, :] = grad
+                if self.auto_diff_jacobian:
+                    # Compute batched Jacobian using autograd
+                    jacobian = torch.zeros(B, 3, 3, device=self.device, dtype=torch.float64)
+                    for j in range(3):
+                        grad = torch.autograd.grad(residual[:, j].sum(), xi, retain_graph=True, create_graph=True)[0]
+                        jacobian[:, j, :] = grad
+
+                else:
+                    theta = torch.norm(xi, dim=1, keepdim=True).clamp(min=1e-10)  # (B,1)
+
+                    # quaternion
+                    q_xi = quat_exp_batch(-xi)
+                    
+                    sin_theta = torch.sin(theta)
+                    cos_theta = torch.cos(theta)
+
+                    I3 = torch.eye(3, device=xi.device, dtype=xi.dtype).unsqueeze(0).repeat(B,1,1)  # (B,3,3)
+                    v_skew = skew_batch(xi)  # (B,3,3)
+                    outer = xi.unsqueeze(2) @ xi.unsqueeze(1)  # (B,3,3)
+
+                    dIm_dxi = (-cos_theta[:,:,None]*I3
+                            + (sin_theta[:,:,None]/theta[:,:,None])*v_skew
+                            + ((1 - sin_theta/theta)[:,:,None]/theta[:,:,None]**2)*outer)
+
+                    jacobian = torch.bmm(G_batch(q_xi), J_q) @ dIm_dxi  # (B,3,3)
 
                 # Newton step
                 dF_inv = torch.inverse(jacobian)  # (B,3,3)
@@ -238,7 +269,10 @@ class S3FVIN(torch.nn.Module):
             # qk_next = qk_next / torch.norm(qk_next, dim=1, keepdim=True) # normalize quaternion to avoid error accumulation
 
             # Compute next momentum and angular velocity
-            V_qk_next = self.V_net(qk_next)
+            if self.quat_sym:
+                V_qk_next = 0.5 * (self.V_net(qk_next) + self.V_net(-qk_next))  # V(q) = V(-q)
+            else:
+                V_qk_next = self.V_net(qk_next)
             dVk_next = torch.autograd.grad(V_qk_next.sum(), qk_next, create_graph=True)[0]  # (B,4)
             qk_conj = qk * torch.tensor([1, -1, -1, -1], device=self.device, dtype=torch.float64)
             qk_ast_qk_next = quat_mul_batch(qk_conj, qk_next)  # (B,4)

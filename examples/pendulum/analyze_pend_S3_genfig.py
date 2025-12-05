@@ -18,16 +18,25 @@ plt.rcParams['text.usetex'] = True
 gpu=0
 device = torch.device('cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu')
 dt = 0.02
-fixed_J = True
+fixed_J = False
+quat_sym = True
+
+label = '-s3ham' if not fixed_J else '-s3ham_fixed_J'
+if quat_sym:
+    label += '_quat_sym'
 
 def get_model(load = True):
     model = S3FVIN(device=device, u_dim = 1, time_step = dt, fixed_J=fixed_J).to(device)
     stats = None
     if load:
-        path = 'data/run1/pendulum-s3ham-vin-10p-6000.tar' if not fixed_J else 'data/run1/pendulum-s3ham_fixed_J-vin-10p-6000.tar'
+        path = 'data/run1/pendulum{}-vin-10p-6000.tar'.format(label)
         model.load_state_dict(torch.load(sys.path_here + path, map_location=device))
-        path = 'data/run1/pendulum-s3ham-vin-10p-stats.pkl' if not fixed_J else 'data/run1/pendulum-s3ham_fixed_J-vin-10p-stats.pkl'
-        stats = from_pickle(sys.path_here + path)
+        try:
+            path = 'data/run1/pendulum{}-vin-10p-stats.pkl'.format(label)
+            stats = from_pickle(sys.path_here + path)
+        except:
+            path = 'data/run1/pendulum-s3ham-vin-10p-stats.pkl'.format(label)
+            stats = from_pickle(sys.path_here + path)
     return model, stats
 
 if __name__ == "__main__":
@@ -64,18 +73,32 @@ if __name__ == "__main__":
     q_zeros = torch.zeros(40,2).to(device)
     quat = torch.cat((torch.cos(q_tensor/2), q_zeros, torch.sin(q_tensor/2)), dim=1)
     quat = quat / torch.norm(quat, dim=1, keepdim=True)
-    signs = torch.sign(quat[:,0:1])
-    quat = signs * quat # ensure w >= 0 for consistency
+    # signs = torch.sign(quat[:,0:1])
+    # quat = signs * quat # ensure w >= 0 for consistency
     rotmat = compute_rotation_matrix_from_quaternion(quat)
     # This is the generalized coordinates q = R
     rotmat = rotmat.view(rotmat.shape[0], 3, 3)
 
-    quat = batch_rotmat_to_quat(rotmat)
+    quat_raw = batch_rotmat_to_quat(rotmat)
+
+    # # Ensure consistency of quaternion representation
+    # quat = torch.zeros_like(quat_raw)
+    # for i in range(1, quat_raw.shape[0]):
+    #     if torch.dot(quat_raw[i], quat[i-1]) < 0:
+    #         quat[i] = -quat_raw[i]
+    #     else:
+    #         quat[i] = quat_raw[i]
+    quat = quat_raw
 
     # Calculate the M^-1, V, g for the q.
-    M_q_inv = model.J_net(quat) if not fixed_J else model.J_net(torch.ones_like(quat))
-    V_q = model.V_net(quat)
-    g_q = model.g_net(quat)
+    if quat_sym:
+        M_q_inv = 0.5 * (model.J_net(quat) + model.J_net(-quat)) 
+        V_q = 0.5 * (model.V_net(quat) + model.V_net(-quat))
+        g_q = 0.5 * (model.g_net(quat) + model.g_net(-quat))
+    else:
+        M_q_inv = model.J_net(quat) if not fixed_J else model.J_net(torch.ones_like(quat))
+        V_q = model.V_net(quat)
+        g_q = model.g_net(quat)
     # print(g_q)
 
     # Plot g(q)
